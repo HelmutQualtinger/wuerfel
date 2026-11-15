@@ -30,7 +30,7 @@ Erzeuge einen Würfel als Volumenmodell (Einheiten mm).
 5. **Vorschau** `wuerfel_vorschau.png`: goldfarben schattiert, einmal gesamt und einmal aufgeschnitten.
 
 ## Umsetzung
-- Python 3 mit build123d in einer lokalen `.venv`. Für die Zeichnung matplotlib mit Hidden-Line-Projektion aus build123d.
+- Python 3.12 mit build123d, Projekt mit uv verwaltet (`pyproject.toml`, `uv.lock`, Ausführen mit `uv run`). Für die Zeichnung matplotlib mit Hidden-Line-Projektion aus build123d.
 - Skripte: `wuerfel.py` (Modell), `export.py` (STL/STEP/GLB), `zeichnung.py` (Zeichnung).
 - Prüfen und Ergebnis melden:
   - Körper gültig, genau 1 Solid

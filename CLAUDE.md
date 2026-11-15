@@ -8,14 +8,14 @@ Parametric CAD model of a 60 mm cube (German naming throughout): stepped bores o
 
 ## Commands
 
-Python 3.12 venv with build123d + matplotlib (create with `python3 -m venv .venv && .venv/bin/pip install build123d matplotlib`). Run from the repo root — scripts write outputs to the CWD and import `wuerfel`.
+Python 3.12 project managed with uv: dependencies (build123d, matplotlib, pyvista, imageio) in `pyproject.toml`, pinned in `uv.lock`; `uv sync` creates `.venv`. Use `uv add` / `uv run`, never pip. Run from the repo root — scripts write outputs to the CWD and import `wuerfel`.
 
 ```sh
-.venv/bin/python wuerfel.py                      # build + print volume, validity, solid count (must be 1)
-.venv/bin/python export.py                       # -> wuerfel.stl, wuerfel.step, wuerfel_gold.glb
-.venv/bin/python zeichnung.py                    # -> wuerfel_zeichnung.pdf / .png (A3 drawing)
-.venv/bin/python vorschau.py wuerfel_vorschau.png  # gold-shaded preview, full + cut open
-.venv/bin/python video.py                          # 60 s rotation video from wuerfel_gold.glb (pyvista PBR, ~2 min); --test = 3 stills
+uv run wuerfel.py                      # build + print volume, validity, solid count (must be 1)
+uv run export.py                       # -> wuerfel.stl, wuerfel.step, wuerfel_gold.glb
+uv run zeichnung.py                    # -> wuerfel_zeichnung.pdf / .png (A3 drawing)
+uv run vorschau.py wuerfel_vorschau.png  # gold-shaded preview, full + cut open
+uv run video.py                          # 60 s rotation video from wuerfel_gold.glb (pyvista PBR, ~2 min); --test = 3 stills
 ```
 
 `README.md` (English) embeds the drawing, preview and `wuerfel_rotation.gif`. After re-rendering the video, rebuild the GIF with the ffmpeg command listed there.

@@ -67,6 +67,25 @@
   #video { max-width: 100%; max-height: calc(100% - 48px); background: #000; }
   .video-bar { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 13px; }
 
+  /* Markdown docs */
+  .doc-view { overflow-y: auto; background: var(--bg); }
+  .doc-view.active { display: block; }
+  .md { max-width: 900px; margin: 0 auto; padding: 32px 32px 64px; line-height: 1.6; font-size: 15px; }
+  .md h1 { font-size: 28px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .md h2 { font-size: 20px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-top: 32px; }
+  .md h3 { font-size: 16px; margin-top: 24px; }
+  .md a { color: var(--accent); }
+  .md img { max-width: 100%; height: auto; border-radius: 4px; }
+  .md code { background: #2a2c33; padding: 1px 5px; border-radius: 3px; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .md pre { background: #1f2026; border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
+  .md pre code { background: none; padding: 0; }
+  .md table { border-collapse: collapse; margin: 16px 0; }
+  .md th, .md td { border: 1px solid var(--line); padding: 6px 12px; text-align: left; vertical-align: top; }
+  .md th { background: var(--panel); }
+  .md blockquote { margin: 0; padding-left: 16px; border-left: 3px solid var(--line); color: var(--muted); }
+  .md .err { color: var(--muted); }
+
   /* Drop */
   #drop { position: fixed; inset: 0; background: rgba(212, 167, 58, .12); border: 3px dashed var(--accent);
     display: none; align-items: center; justify-content: center; font-size: 18px; z-index: 10; pointer-events: none; }
@@ -87,6 +106,8 @@
   <nav>
     <button data-view="model" class="active">3D model</button>
     <button data-view="video">Video</button>
+    <button data-view="readme">README</button>
+    <button data-view="prompt">Prompt</button>
   </nav>
   <span class="hint">Drop a .glb or .mp4 file anywhere to load it</span>
 </header>
@@ -116,6 +137,18 @@
       </div>
       <div class="row"><input type="range" id="clip-pos" min="-30" max="30" step="0.5" value="0"></div>
       <div class="row"><span style="color:var(--muted)">Position</span><output id="clip-out">0.0 mm</output></div>
+
+      <h2>Material</h2>
+      <div class="row">
+        <select id="material" style="flex:1">
+          <option value="gold" selected>Gold (brushed)</option>
+          <option value="copper">Copper</option>
+          <option value="steel">Brushed steel</option>
+          <option value="mahogany">Mahogany</option>
+          <option value="glass">Green glass</option>
+          <option value="file">As in file</option>
+        </select>
+      </div>
 
       <h2>Lighting</h2>
       <div class="row"><label for="exposure">Exposure</label><output id="exposure-out">0.70</output></div>
@@ -152,6 +185,8 @@
       <span id="video-name">wuerfel_rotation.mp4</span>
     </div>
   </section>
+  <section id="view-readme" class="view doc-view"><article class="md" data-src="README.md">Loading README.md …</article></section>
+  <section id="view-prompt" class="view doc-view"><article class="md" data-src="prompt.md">Loading prompt.md …</article></section>
 </main>
 
 <div id="drop">Drop .glb / .gltf or .mp4</div>
@@ -161,6 +196,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { marked } from 'https://cdn.jsdelivr.net/npm/marked@15.0.0/lib/marked.esm.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -168,7 +204,10 @@ const $ = (id) => document.getElementById(id);
 function showView(name) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
-  if (name === 'model') onResize(); else $('video').pause?.();
+  if (name === 'model') onResize();
+  if (name !== 'video') $('video').pause?.();
+  const doc = document.querySelector(`#view-${name} .md`);
+  if (doc) loadDoc(doc);
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => showView(b.dataset.view));
 
@@ -204,6 +243,7 @@ function onResize() {
   renderer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  redraw();
 }
 new ResizeObserver(onResize).observe(wrap);
 
@@ -241,9 +281,9 @@ function updateClip() {
   const c = { x: center.x, y: -center.z, z: center.y }[clipAxis];
   // plane: n·p + d = 0 → keep side where n·p + d ≥ 0
   clipPlane.constant = -clipSign * (c + mm / 1000);
-  eachMaterial(m => { m.clippingPlanes = on ? [clipPlane] : []; m.side = on ? THREE.DoubleSide : THREE.FrontSide; m.needsUpdate = true; });
+  eachMaterial(m => { m.clippingPlanes = on ? [clipPlane] : []; m.side = on || m.userData.doubleSide ? THREE.DoubleSide : THREE.FrontSide; m.needsUpdate = true; });
 }
-$('clip-on').onchange = updateClip;
+$('clip-on').onchange = () => { updateClip(); precompile(); };   // toggles clipping/side → new shader variant
 $('clip-pos').oninput = updateClip;
 $('clip-flip').onclick = () => { clipSign = -clipSign; updateClip(); };
 document.querySelectorAll('#clip-axis button').forEach(b => b.onclick = () => {
@@ -277,13 +317,102 @@ function addTangents(geo) {
   geo.setAttribute('tangent', new THREE.BufferAttribute(t, 4));
 }
 
+/* ---------- Materials ---------- */
+// Metals: physically based F0 colours (linear), roughness, anisotropy along the generated tangents.
+function metal(name, rgb, roughness, anisotropy) {
+  return new THREE.MeshPhysicalMaterial({
+    name, color: new THREE.Color().setRGB(...rgb, THREE.LinearSRGBColorSpace),
+    metalness: 1, roughness, anisotropy, anisotropyRotation: 0,
+  });
+}
+
+// Mahogany: procedural 3D wood grain (the GLB has no UVs), computed from the
+// object-space position, so the cube looks cut from one solid block. Grain runs
+// along CAD X; growth rings are concentric around that axis, distorted by noise.
+function mahogany() {
+  const m = new THREE.MeshPhysicalMaterial({
+    name: 'Mahogany', color: 0xffffff, metalness: 0, roughness: 0.55,
+    clearcoat: 0.8, clearcoatRoughness: 0.12, specularIntensity: 0.4,
+  });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWoodPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWoodPos = position * 1000.0;'); // m → mm
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vWoodPos;
+float h31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
+float vnoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h31(i), h31(i + vec3(1,0,0)), f.x), mix(h31(i + vec3(0,1,0)), h31(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(h31(i + vec3(0,0,1)), h31(i + vec3(1,0,1)), f.x), mix(h31(i + vec3(0,1,1)), h31(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float s = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { s += a * vnoise(p); p *= 2.03; a *= 0.5; } return s; }
+vec3 woodColor(vec3 p) {
+  vec3 q = p + vec3(0.0, 41.0, -73.0);                          // pith outside the cube
+  float r = length(q.yz) + 3.0 * fbm(q * vec3(0.02, 0.12, 0.12));
+  float ring = fract(r * 0.32);
+  ring = smoothstep(0.0, 0.25, ring) * (1.0 - smoothstep(0.65, 1.0, ring));
+  float streak = fbm(vec3(q.x * 0.04, q.y * 1.6, q.z * 1.6));    // fine pores along the grain
+  vec3 dark  = vec3(0.045, 0.007, 0.003);
+  vec3 light = vec3(0.150, 0.026, 0.010);
+  vec3 c = mix(dark, light, 0.35 + 0.45 * ring + 0.2 * streak);
+  return c * (0.85 + 0.3 * fbm(p * 0.05));
+}`)
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( woodColor(vWoodPos), opacity );');
+  };
+  m.customProgramCacheKey = () => 'mahogany';
+  return m;
+}
+
+// Green glass: real refraction via three.js transmission. Colour comes mostly from
+// absorption (attenuation), so thick walls look deeper green than thin bars.
+// Double-sided so the back walls are visible through the front.
+function glass() {
+  const m = new THREE.MeshPhysicalMaterial({
+    name: 'Green glass', color: 0xe8fff0, metalness: 0, roughness: 0.04,
+    transmission: 1, ior: 1.52, thickness: 0.006,          // scene units are metres
+    attenuationColor: new THREE.Color(0x1f9e4a), attenuationDistance: 0.012,
+    specularIntensity: 1, envMapIntensity: 1.2,
+  });
+  m.userData.doubleSide = true;
+  return m;
+}
+
+const MATERIALS = {
+  gold:     metal('Gold (brushed)', [1.000, 0.766, 0.336], 0.35, 0.7),
+  copper:   metal('Copper',         [0.955, 0.638, 0.538], 0.28, 0.0),
+  steel:    metal('Brushed steel',  [0.560, 0.570, 0.580], 0.38, 0.85),
+  mahogany: mahogany(),
+  glass:    glass(),
+};
+
+// Shader programs for MeshPhysicalMaterial are large; compiling them synchronously on
+// the first render blocks the main thread for ~1 s. compileAsync uses
+// KHR_parallel_shader_compile, so the page stays responsive; rendering pauses meanwhile.
+let compiling = 0;
+async function precompile() {
+  if (!model) return;
+  compiling++;
+  try { await renderer.compileAsync(model, camera, scene); }
+  finally { compiling--; redraw(); }
+}
+
+function applyMaterial(key) {
+  model?.traverse(o => { if (o.isMesh) o.material = key === 'file' ? o.userData.fileMaterial : MATERIALS[key]; });
+  updateClip();                                   // re-apply clipping, side and wireframe
+  $('wire').dispatchEvent(new Event('change'));
+  return precompile();
+}
+$('material').onchange = e => applyMaterial(e.target.value);
+
 const loader = new GLTFLoader();
 function loadModel(url, name) {
   setStatus(`Loading ${name} …`);
-  loader.load(url, gltf => {
+  loader.load(url, async gltf => {
     if (model) scene.remove(model);
     model = gltf.scene;
-    model.traverse(o => { if (o.isMesh) addTangents(o.geometry); });
+    model.traverse(o => { if (o.isMesh) { addTangents(o.geometry); o.userData.fileMaterial = o.material; } });
     scene.add(model);
 
     const box = new THREE.Box3().setFromObject(model);
@@ -300,7 +429,7 @@ function loadModel(url, name) {
       const g = o.geometry;
       verts += g.attributes.position.count;
       tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
-      mats.add(o.material.name || 'unnamed');
+      mats.add(o.userData.fileMaterial.name || 'unnamed');
     });
     const mm = v => (v * 1000).toFixed(1) + ' mm';
     $('info').innerHTML = `
@@ -310,27 +439,57 @@ function loadModel(url, name) {
       <dt>Size Z</dt><dd>${mm(size.y)}</dd>
       <dt>Triangles</dt><dd>${Math.round(tris).toLocaleString('en')}</dd>
       <dt>Vertices</dt><dd>${verts.toLocaleString('en')}</dd>
-      <dt>Material</dt><dd>${[...mats].join(', ')}</dd>
+      <dt>File material</dt><dd>${[...mats].join(', ')}</dd>
       <dt>Extensions</dt><dd>${exts.join('<br>') || '–'}</dd>`;
 
-    updateClip();
-    $('wire').dispatchEvent(new Event('change'));
     setCam('iso');
+    setStatus(`Preparing shaders …`);
+    await applyMaterial($('material').value);
     setStatus('');
   }, undefined, err => {
     console.error(err);
     setStatus(location.protocol === 'file:'
-      ? `Browsers block loading files from <code>file://</code>.<br><br>Serve the folder instead:<br><code>python3 -m http.server 8000</code> → <code>http://localhost:8000/viewer.html</code><br><br>or drop <code>wuerfel_gold.glb</code> onto this window.`
+      ? `Browsers block loading files from <code>file://</code>.<br><br>Serve the folder instead:<br><code>uv run -m http.server 8000</code> → <code>http://localhost:8000/viewer.html</code><br><br>or drop <code>wuerfel_gold.glb</code> onto this window.`
       : `Could not load ${name}: ${err.message || err}`);
   });
 }
 
+// Render on demand: only when the camera moves (incl. damping and auto-rotate) or
+// something in the scene changed, and never while the 3D tab is hidden.
+let dirty = true;
+function redraw() { dirty = true; }
+controls.addEventListener('change', redraw);
+document.querySelector('aside').addEventListener('input', redraw);
+document.querySelector('aside').addEventListener('change', redraw);
+document.querySelector('aside').addEventListener('click', redraw);
 renderer.setAnimationLoop(() => {
-  controls.update();
+  if (!$('view-model').classList.contains('active') || compiling) return;
+  controls.update();                              // fires 'change' while moving
+  if (!dirty) return;
+  dirty = false;
   renderer.render(scene, camera);
 });
 
 loadModel('wuerfel_gold.glb', 'wuerfel_gold.glb');
+
+/* ---------- Markdown docs ---------- */
+// Fetched on first open and re-fetched on every tab switch, so edits show up without reload.
+async function loadDoc(el) {
+  try {
+    const res = await fetch(el.dataset.src, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    el.innerHTML = marked.parse(await res.text());
+    // In-page links to repo files: open media/model files in the viewer's own tabs
+    el.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href');
+      if (/\.mp4$/i.test(href)) a.onclick = e => { e.preventDefault(); showView('video'); };
+      else if (/\.glb$/i.test(href)) a.onclick = e => { e.preventDefault(); showView('model'); };
+      else if (!href.startsWith('#')) a.target = '_blank';
+    });
+  } catch (err) {
+    el.innerHTML = `<p class="err">Could not load <code>${el.dataset.src}</code>: ${err.message}</p>`;
+  }
+}
 
 /* ---------- Video ---------- */
 const video = $('video');

@@ -40,24 +40,23 @@ The drawing is A3 landscape at 1:1 scale, in first-angle projection. It has a fr
 | `wuerfel_zeichnung.pdf` / `.png` | Technical drawing |
 | `wuerfel_vorschau.png` | Shaded preview |
 | `wuerfel_rotation.mp4` / `.gif` | Rotation video and GIF preview |
-| `viewer.html` | Browser viewer for the GLB (orbit, section cut, exposure) and the MP4. Serve the folder: `python3 -m http.server 8000`, then open `http://localhost:8000/viewer.html` |
+| `viewer.html` | Browser viewer for the GLB (orbit, section cut, exposure) and the MP4. Serve the folder: `uv run -m http.server 8000`, then open `http://localhost:8000/viewer.html` |
 | `prompt.md` | Specification (German) that reproduces the model in one pass |
 
 The brushed effect in the GLB needs a viewer that supports `KHR_materials_anisotropy`, such as Blender or three.js. macOS Preview shows plain gold.
 
 ## Build
 
-Requires Python 3.12. Run the scripts from the repository root.
+Requires [uv](https://docs.astral.sh/uv/). Dependencies are declared in `pyproject.toml` and pinned in `uv.lock`; uv installs Python 3.12 if needed. Run the scripts from the repository root.
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install build123d matplotlib pyvista imageio imageio-ffmpeg
+uv sync                                  # create .venv from uv.lock
 
-.venv/bin/python wuerfel.py                        # build model, print validity and solid count
-.venv/bin/python export.py                         # STL, STEP, GLB
-.venv/bin/python zeichnung.py                      # technical drawing (PDF + PNG)
-.venv/bin/python vorschau.py wuerfel_vorschau.png  # shaded preview
-.venv/bin/python video.py                          # 60 s rotation video (~2 min); --test renders 3 stills
+uv run wuerfel.py                        # build model, print validity and solid count
+uv run export.py                         # STL, STEP, GLB
+uv run zeichnung.py                      # technical drawing (PDF + PNG)
+uv run vorschau.py wuerfel_vorschau.png  # shaded preview
+uv run video.py                          # 60 s rotation video (~2 min); --test renders 3 stills
 ```
 
 To rebuild the GIF from the video:
