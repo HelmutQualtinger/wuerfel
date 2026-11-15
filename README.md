@@ -40,6 +40,7 @@ The drawing is A3 landscape at 1:1 scale, in first-angle projection. It has a fr
 | `wuerfel_zeichnung.pdf` / `.png` | Technical drawing |
 | `wuerfel_vorschau.png` | Shaded preview |
 | `wuerfel_rotation.mp4` / `.gif` | Rotation video and GIF preview |
+| `viewer.html` | Browser viewer for the GLB (orbit, section cut, exposure) and the MP4. Serve the folder: `python3 -m http.server 8000`, then open `http://localhost:8000/viewer.html` |
 | `prompt.md` | Specification (German) that reproduces the model in one pass |
 
 The brushed effect in the GLB needs a viewer that supports `KHR_materials_anisotropy`, such as Blender or three.js. macOS Preview shows plain gold.
