@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nested Gold Cube – Viewer</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #15161a;
+    --panel: #1f2026;
+    --line: #33353d;
+    --text: #e4e4e7;
+    --muted: #9a9ba3;
+    --accent: #d4a73a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  body { display: flex; flex-direction: column; }
+
+  header { display: flex; align-items: center; gap: 24px; padding: 0 16px; height: 48px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  nav { display: flex; gap: 4px; }
+  nav button { background: none; border: 0; color: var(--muted); padding: 14px 12px; cursor: pointer;
+    font: inherit; border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  header .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  main { flex: 1; position: relative; min-height: 0; }
+  .view { position: absolute; inset: 0; display: none; }
+  .view.active { display: flex; }
+
+  /* 3D */
+  #view-model canvas { display: block; width: 100%; height: 100%; }
+  #model-wrap { flex: 1; position: relative; }
+  aside { width: 260px; flex: none; background: var(--panel); border-left: 1px solid var(--line);
+    padding: 16px; overflow-y: auto; }
+  aside h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 20px 0 8px; }
+  aside h2:first-child { margin-top: 0; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+  .row label { color: var(--text); }
+  .row output { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  select, .btn { background: #2a2c33; color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+    padding: 5px 8px; font: inherit; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .seg button { flex: 1; background: #2a2c33; color: var(--muted); border: 0; padding: 5px 0; cursor: pointer; font: inherit; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.active { background: var(--accent); color: #15161a; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 12px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: var(--muted); pointer-events: none; padding: 24px; }
+  .overlay.hidden { display: none; }
+  .overlay code { color: var(--text); }
+
+  /* Video */
+  #view-video { flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: #000; }
+  #video { max-width: 100%; max-height: calc(100% - 48px); background: #000; }
+  .video-bar { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 13px; }
+
+  /* Drop */
+  #drop { position: fixed; inset: 0; background: rgba(212, 167, 58, .12); border: 3px dashed var(--accent);
+    display: none; align-items: center; justify-content: center; font-size: 18px; z-index: 10; pointer-events: none; }
+  body.dragging #drop { display: flex; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<header>
+  <h1>Nested Gold Cube</h1>
+  <nav>
+    <button data-view="model" class="active">3D model</button>
+    <button data-view="video">Video</button>
+  </nav>
+  <span class="hint">Drop a .glb or .mp4 file anywhere to load it</span>
+</header>
+
+<main>
+  <section id="view-model" class="view active">
+    <div id="model-wrap">
+      <div id="status" class="overlay">Loading wuerfel_gold.glb …</div>
+    </div>
+    <aside>
+      <h2>View</h2>
+      <div class="btn-row">
+        <button class="btn" data-cam="iso">Iso</button>
+        <button class="btn" data-cam="front">Front</button>
+        <button class="btn" data-cam="top">Top</button>
+        <button class="btn" data-cam="right">Right</button>
+      </div>
+      <div class="row"><label><input type="checkbox" id="autorotate"> Auto-rotate</label></div>
+
+      <h2>Section</h2>
+      <div class="row"><label><input type="checkbox" id="clip-on"> Cut open</label></div>
+      <div class="row">
+        <div class="seg" id="clip-axis" style="flex:1">
+          <button data-axis="x">X</button><button data-axis="y">Y</button><button data-axis="z" class="active">Z</button>
+        </div>
+        <button class="btn" id="clip-flip" title="Flip side">⇅</button>
+      </div>
+      <div class="row"><input type="range" id="clip-pos" min="-30" max="30" step="0.5" value="0"></div>
+      <div class="row"><span style="color:var(--muted)">Position</span><output id="clip-out">0.0 mm</output></div>
+
+      <h2>Lighting</h2>
+      <div class="row"><label for="exposure">Exposure</label><output id="exposure-out">0.70</output></div>
+      <div class="row"><input type="range" id="exposure" min="0.2" max="2.5" step="0.05" value="0.7"></div>
+      <div class="row">
+        <label for="bg">Background</label>
+        <select id="bg">
+          <option value="#15161a">Dark</option>
+          <option value="#5a5c63">Grey</option>
+          <option value="#f2f2f2">Light</option>
+        </select>
+      </div>
+      <div class="row"><label><input type="checkbox" id="wire"> Wireframe</label></div>
+
+      <h2>Model</h2>
+      <dl id="info"><dt>File</dt><dd>–</dd></dl>
+    </aside>
+  </section>
+
+  <section id="view-video" class="view">
+    <video id="video" src="wuerfel_rotation.mp4" controls loop muted playsinline preload="metadata"></video>
+    <div class="video-bar">
+      <label>Speed
+        <select id="rate">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </label>
+      <button class="btn" id="frame-back" title="One frame back (,)">◀ Frame</button>
+      <button class="btn" id="frame-fwd" title="One frame forward (.)">Frame ▶</button>
+      <span id="video-name">wuerfel_rotation.mp4</span>
+    </div>
+  </section>
+</main>
+
+<div id="drop">Drop .glb / .gltf or .mp4</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------- Tabs ---------- */
+function showView(name) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+  if (name === 'model') onResize(); else $('video').pause?.();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => showView(b.dataset.view));
+
+/* ---------- 3D scene ---------- */
+const wrap = $('model-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.7;
+renderer.localClippingEnabled = true;
+wrap.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color($('bg').value);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+keyLight.position.set(1, 2, 1.5);
+scene.add(keyLight);
+
+const camera = new THREE.PerspectiveCamera(35, 1, 0.001, 10);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+let model = null, radius = 0.05, center = new THREE.Vector3();
+let clipAxis = 'z', clipSign = -1;
+
+function onResize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(onResize).observe(wrap);
+
+const CAMS = {               // glTF is Y-up: CAD +Z → +Y, CAD +Y → −Z
+  iso:   [1, 0.8, 1.2],
+  front: [0, 0, 1],         // looking along CAD +Y  (view from −Y)
+  top:   [0, 1, 0.0001],
+  right: [1, 0, 0],
+};
+function setCam(name) {
+  const d = new THREE.Vector3(...CAMS[name]).normalize();
+  const dist = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.1;
+  camera.position.copy(center).addScaledVector(d, dist);
+  camera.near = dist / 100; camera.far = dist * 10;
+  camera.updateProjectionMatrix();
+  controls.target.copy(center);
+  controls.update();
+}
+document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => setCam(b.dataset.cam));
+
+function eachMaterial(fn) {
+  model?.traverse(o => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(fn);
+  });
+}
+
+function updateClip() {
+  const on = $('clip-on').checked;
+  const mm = parseFloat($('clip-pos').value);
+  $('clip-out').textContent = mm.toFixed(1) + ' mm';
+  // UI axes are CAD axes; map to glTF (X→x, Y→−z, Z→y)
+  const n = { x: [1, 0, 0], y: [0, 0, -1], z: [0, 1, 0] }[clipAxis];
+  clipPlane.normal.set(...n).multiplyScalar(clipSign);
+  const c = { x: center.x, y: -center.z, z: center.y }[clipAxis];
+  // plane: n·p + d = 0 → keep side where n·p + d ≥ 0
+  clipPlane.constant = -clipSign * (c + mm / 1000);
+  eachMaterial(m => { m.clippingPlanes = on ? [clipPlane] : []; m.side = on ? THREE.DoubleSide : THREE.FrontSide; m.needsUpdate = true; });
+}
+$('clip-on').onchange = updateClip;
+$('clip-pos').oninput = updateClip;
+$('clip-flip').onclick = () => { clipSign = -clipSign; updateClip(); };
+document.querySelectorAll('#clip-axis button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#clip-axis button').forEach(x => x.classList.toggle('active', x === b));
+  clipAxis = b.dataset.axis; updateClip();
+});
+
+$('autorotate').onchange = e => { controls.autoRotate = e.target.checked; };
+$('exposure').oninput = e => { renderer.toneMappingExposure = +e.target.value; $('exposure-out').textContent = (+e.target.value).toFixed(2); };
+$('bg').onchange = e => { scene.background.set(e.target.value); };
+$('wire').onchange = e => eachMaterial(m => { m.wireframe = e.target.checked; });
+
+function setStatus(text) {
+  $('status').innerHTML = text || '';
+  $('status').classList.toggle('hidden', !text);
+}
+
+// KHR_materials_anisotropy needs a tangent frame. Without UVs/tangents three.js
+// derives a degenerate one and the surface blows out, so build tangents from the
+// normals: brush direction = horizontal around the vertical axis, X on top/bottom faces.
+function addTangents(geo) {
+  if (geo.attributes.tangent || !geo.attributes.normal) return;
+  const n = geo.attributes.normal, t = new Float32Array(n.count * 4);
+  const nv = new THREE.Vector3(), tv = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), ax = new THREE.Vector3(1, 0, 0);
+  for (let i = 0; i < n.count; i++) {
+    nv.fromBufferAttribute(n, i);
+    tv.crossVectors(Math.abs(nv.y) > 0.9 ? ax : up, nv).normalize();
+    if (!isFinite(tv.x)) tv.set(1, 0, 0);
+    t.set([tv.x, tv.y, tv.z, 1], i * 4);
+  }
+  geo.setAttribute('tangent', new THREE.BufferAttribute(t, 4));
+}
+
+const loader = new GLTFLoader();
+function loadModel(url, name) {
+  setStatus(`Loading ${name} …`);
+  loader.load(url, gltf => {
+    if (model) scene.remove(model);
+    model = gltf.scene;
+    model.traverse(o => { if (o.isMesh) addTangents(o.geometry); });
+    scene.add(model);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    box.getCenter(center);
+    radius = box.getBoundingSphere(new THREE.Sphere()).radius;
+    const r = (size.x * 500); // half-extent in mm
+    $('clip-pos').min = (-r).toFixed(1); $('clip-pos').max = r.toFixed(1);
+
+    let tris = 0, verts = 0;
+    const mats = new Set(), exts = gltf.parser.json.extensionsUsed || [];
+    model.traverse(o => {
+      if (!o.isMesh) return;
+      const g = o.geometry;
+      verts += g.attributes.position.count;
+      tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+      mats.add(o.material.name || 'unnamed');
+    });
+    const mm = v => (v * 1000).toFixed(1) + ' mm';
+    $('info').innerHTML = `
+      <dt>File</dt><dd>${name}</dd>
+      <dt>Size X</dt><dd>${mm(size.x)}</dd>
+      <dt>Size Y</dt><dd>${mm(size.z)}</dd>
+      <dt>Size Z</dt><dd>${mm(size.y)}</dd>
+      <dt>Triangles</dt><dd>${Math.round(tris).toLocaleString('en')}</dd>
+      <dt>Vertices</dt><dd>${verts.toLocaleString('en')}</dd>
+      <dt>Material</dt><dd>${[...mats].join(', ')}</dd>
+      <dt>Extensions</dt><dd>${exts.join('<br>') || '–'}</dd>`;
+
+    updateClip();
+    $('wire').dispatchEvent(new Event('change'));
+    setCam('iso');
+    setStatus('');
+  }, undefined, err => {
+    console.error(err);
+    setStatus(location.protocol === 'file:'
+      ? `Browsers block loading files from <code>file://</code>.<br><br>Serve the folder instead:<br><code>python3 -m http.server 8000</code> → <code>http://localhost:8000/viewer.html</code><br><br>or drop <code>wuerfel_gold.glb</code> onto this window.`
+      : `Could not load ${name}: ${err.message || err}`);
+  });
+}
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+loadModel('wuerfel_gold.glb', 'wuerfel_gold.glb');
+
+/* ---------- Video ---------- */
+const video = $('video');
+const FPS = 30;
+$('rate').onchange = e => { video.playbackRate = +e.target.value; };
+const step = dir => { video.pause(); video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + dir / FPS)); };
+$('frame-back').onclick = () => step(-1);
+$('frame-fwd').onclick = () => step(1);
+document.addEventListener('keydown', e => {
+  if (!$('view-video').classList.contains('active') || e.target.tagName === 'SELECT') return;
+  if (e.key === ',') step(-1);
+  else if (e.key === '.') step(1);
+  else if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+});
+
+/* ---------- Drag & drop ---------- */
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+  for (const file of e.dataTransfer.files) {
+    const url = URL.createObjectURL(file);
+    if (/\.(glb|gltf)$/i.test(file.name)) { showView('model'); loadModel(url, file.name); }
+    else if (/\.(mp4|webm|mov|m4v)$/i.test(file.name) || file.type.startsWith('video/')) {
+      video.src = url; $('video-name').textContent = file.name; showView('video'); video.play();
+    }
+  }
+});
+</script>
+</body>
+</html>
