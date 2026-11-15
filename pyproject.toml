@@ -1,0 +1,17 @@
+[project]
+name = "wuerfel"
+version = "0.1.0"
+description = "Parametric CAD model of a 60 mm cube with nested frames (build123d)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "build123d>=0.13",
+    "matplotlib>=3.11",
+    "numpy>=2.5",
+    "pyvista>=0.49",
+    "imageio>=2.38",
+    "imageio-ffmpeg>=0.6",
+]
+
+[tool.uv]
+package = false
